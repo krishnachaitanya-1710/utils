@@ -1,0 +1,34 @@
+{
+  "services": [
+    {
+      "name": "dso_customer_care",
+      "label": "DSO Customer Care",
+      "parameters": ["applicationId"],
+      "subApis": [
+        {
+          "name": "pipeline",
+          "label": "Pipeline",
+          "endpoint": "/v1/admin/smartassistant/submitPipeline",
+          "method": "POST",
+          "parameters": ["sysId", "environment", "issueDescription", "jenkinsUrl"]
+        },
+        {
+          "name": "environment",
+          "label": "Environment",
+          "endpoint": "/v1/admin/smartassistant/submitEnvironment",
+          "method": "POST",
+          "parameters": ["sysId", "applicationName", "environment", "issueDescription"]
+        }
+        // Add more sub-APIs here
+      ]
+    },
+    {
+      "name": "ddp_support",
+      "label": "DDP Support",
+      "endpoint": "/v1/admin/smartassistant/processJenkinsResponse",
+      "method": "GET",
+      "parameters": ["jenkinsUrl"],
+      "subApis": []
+    }
+  ]
+}
