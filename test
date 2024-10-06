@@ -1,0 +1,64 @@
+<!-- Code to display the subAPI options dynamically -->
+<div *ngIf="message.subApiOptions">
+  <p>Select one of the options below for {{ currentApiName }}:</p>
+  <div *ngFor="let subApi of message.subApiOptions">
+    <button (click)="selectSubApi(subApi)" class="subapi-btn">
+      {{ subApi.name }}
+    </button>
+  </div>
+</div>
+
+<!-- Code to display the parameter input prompt -->
+<div *ngIf="message.subApiParam">
+  <label for="paramInput">{{ currentApiParams[0].name }}:</label>
+  <input type="text" id="paramInput" (keyup.enter)="invokeApi(apiData)" [(ngModel)]="paramValue"/>
+</div>
+
+
+// Existing code in your component
+handleSubApis(apiData: any): void {
+  if (apiData.subApis && apiData.subApis.length > 0) {
+    this.addMessage({ 
+      sender: 'self-message', 
+      text: `Please select a sub-option for ${apiData.name}`, 
+      botActions: true,
+      subApiOptions: apiData.subApis // Display the list of subAPIs
+    });
+  } else {
+    this.askForNextParameter(apiData); // If no subAPIs, proceed to parameter handling
+  }
+}
+
+selectSubApi(subApi: any): void {
+  // Handle subApi selection and prompt for parameters
+  this.addMessage({ 
+    sender: 'self-message', 
+    text: `Selected sub-option: ${subApi.name}`, 
+    subApiSelected: true 
+  });
+  this.apiData = subApi;
+  this.askForNextParameter(subApi);
+}
+
+askForNextParameter(apiData: any): void {
+  // Assuming 'parameters' in apiData contains the necessary inputs
+  if (apiData.parameters && apiData.parameters.length > 0) {
+    this.addMessage({
+      sender: 'self-message',
+      text: `Please provide the value for ${apiData.parameters[0].name}`,
+      subApiParam: true
+    });
+    this.currentApiParams = apiData.parameters;
+  } else {
+    this.invokeApi(apiData); // Directly invoke API if no parameters are needed
+  }
+}
+
+invokeApi(apiData: any): void {
+  // Placeholder to simulate API invocation
+  this.togglerLoading(true);
+  console.log('Invoking API: ', apiData.name);
+  // Add your actual logic here to call the API
+  this.togglerLoading(false);
+  this.addMessage({ sender: 'bot-message', text: 'API call was successful!' });
+}
