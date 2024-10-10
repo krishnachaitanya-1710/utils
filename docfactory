@@ -1,0 +1,70 @@
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class JenkinsPipelineConfigFetcher {
+
+    // Method to fetch the Jenkins pipeline config.xml
+    public String fetchJenkinsConfig(String pipelineUrl) throws Exception {
+        // Jenkins config.xml is accessible at /job/<job-name>/config.xml
+        URL url = new URL(pipelineUrl + "/config.xml");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("Authorization", "Basic " + getJenkinsCredentials());
+
+        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        String inputLine;
+        StringBuilder content = new StringBuilder();
+
+        while ((inputLine = in.readLine()) != null) {
+            content.append(inputLine);
+        }
+
+        in.close();
+        conn.disconnect();
+
+        return content.toString();
+    }
+
+    // Method to parse config.xml and extract parameter default values
+    public void parsePipelineParameters(String configXml) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        Document doc = builder.parse(new InputSource(new StringReader(configXml)));
+
+        // Find all parameters in the config.xml
+        NodeList parameters = doc.getElementsByTagName("hudson.model.StringParameterDefinition");
+        
+        for (int i = 0; i < parameters.getLength(); i++) {
+            String paramName = parameters.item(i).getElementsByTagName("name").item(0).getTextContent();
+            String defaultValue = parameters.item(i).getElementsByTagName("defaultValue").item(0).getTextContent();
+            
+            System.out.println("Parameter Name: " + paramName + ", Default Value: " + defaultValue);
+        }
+    }
+
+    // Method to encode Jenkins credentials (username:token) into Basic Auth
+    private String getJenkinsCredentials() {
+        String user = "your-jenkins-username";
+        String token = "your-jenkins-api-token";
+        return Base64.getEncoder().encodeToString((user + ":" + token).getBytes());
+    }
+
+    public static void main(String[] args) {
+        try {
+            JenkinsPipelineConfigFetcher fetcher = new JenkinsPipelineConfigFetcher();
+            String configXml = fetcher.fetchJenkinsConfig("http://your-jenkins-url/job/your-job-name");
+
+            fetcher.parsePipelineParameters(configXml);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
