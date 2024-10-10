@@ -1,0 +1,147 @@
+import org.json.JSONObject;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Base64;
+
+public class JenkinsPipelineParameterFetcher {
+
+    private String jenkinsBaseUrl = "http://your-jenkins-url/job/";
+
+    // Fetch the config.xml for a Jenkins pipeline job
+    public String fetchJenkinsConfig(String jobUrl) throws Exception {
+        URL url = new URL(jobUrl + "/config.xml");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("Authorization", "Basic " + getJenkinsCredentials());
+
+        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        String inputLine;
+        StringBuilder content = new StringBuilder();
+
+        while ((inputLine = in.readLine()) != null) {
+            content.append(inputLine);
+        }
+
+        in.close();
+        conn.disconnect();
+
+        return content.toString();
+    }
+
+    // Fetch console log for a Jenkins build
+    public String fetchJenkinsConsoleLog(String jobUrl, String buildNumber) throws Exception {
+        URL url = new URL(jobUrl + "/" + buildNumber + "/consoleText");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("Authorization", "Basic " + getJenkinsCredentials());
+
+        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        String inputLine;
+        StringBuilder content = new StringBuilder();
+
+        while ((inputLine = in.readLine()) != null) {
+            content.append(inputLine);
+        }
+
+        in.close();
+        conn.disconnect();
+
+        return content.toString();
+    }
+
+    // Parse parameters from config.xml
+    public JSONObject parsePipelineParameters(String configXml) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        Document doc = builder.parse(new InputSource(new StringReader(configXml)));
+
+        JSONObject paramsJson = new JSONObject();
+        NodeList parameters = doc.getElementsByTagName("hudson.model.StringParameterDefinition");
+
+        for (int i = 0; i < parameters.getLength(); i++) {
+            String paramName = parameters.item(i).getElementsByTagName("name").item(0).getTextContent();
+            String defaultValue = parameters.item(i).getElementsByTagName("defaultValue").item(0).getTextContent();
+            paramsJson.put(paramName, defaultValue);
+        }
+
+        return paramsJson;
+    }
+
+    // Method to extract ddp_repo_url and ddp_repo_revision based on the pipeline type
+    public JSONObject getPipelineParameters(String pipelineUrl, String pipelineType, String buildNumber) throws Exception {
+        JSONObject response = new JSONObject();
+
+        switch (pipelineType) {
+            case "packaging":
+                // Get parameters directly from the pipeline config
+                String configXml = fetchJenkinsConfig(pipelineUrl);
+                response = parsePipelineParameters(configXml);
+                break;
+
+            case "deployment":
+                // Fetch packaging job parameters if available
+                String deploymentConfigXml = fetchJenkinsConfig(pipelineUrl);
+                JSONObject deploymentParams = parsePipelineParameters(deploymentConfigXml);
+
+                if (deploymentParams.has("packagingJobUrl")) {
+                    String packagingJobUrl = deploymentParams.getString("packagingJobUrl");
+                    String packagingConfigXml = fetchJenkinsConfig(packagingJobUrl);
+                    response = parsePipelineParameters(packagingConfigXml);
+                }
+                break;
+
+            case "release_candidate_packaging":
+                // Fetch parameters from packaging job info in console log
+                String consoleLog = fetchJenkinsConsoleLog(pipelineUrl, buildNumber);
+                String packagingJobUrl = extractPackagingJobUrlFromConsoleLog(consoleLog);
+                
+                if (packagingJobUrl != null) {
+                    String packagingConfigXml = fetchJenkinsConfig(packagingJobUrl);
+                    response = parsePipelineParameters(packagingConfigXml);
+                }
+                break;
+
+            default:
+                throw new Exception("Unknown pipeline type");
+        }
+
+        return response;
+    }
+
+    // Method to extract packaging job URL from console log
+    public String extractPackagingJobUrlFromConsoleLog(String consoleLog) {
+        // Assume console log contains a line with the packaging job URL in a recognizable format
+        String[] logLines = consoleLog.split("\n");
+        for (String line : logLines) {
+            if (line.contains("Packaging Job URL:")) {
+                return line.split("Packaging Job URL:")[1].trim();
+            }
+        }
+        return null;
+    }
+
+    // Encode Jenkins credentials (username:token) into Base64 for Basic Auth
+    private String getJenkinsCredentials() {
+        String user = "your-jenkins-username";
+        String token = "your-jenkins-api-token";
+        return Base64.getEncoder().encodeToString((user + ":" + token).getBytes());
+    }
+
+    public static void main(String[] args) {
+        try {
+            JenkinsPipelineParameterFetcher fetcher = new JenkinsPipelineParameterFetcher();
+            JSONObject result = fetcher.getPipelineParameters("http://your-jenkins-url/job/your-job-name", "packaging", "latest");
+
+            System.out.println(result.toString(2));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
